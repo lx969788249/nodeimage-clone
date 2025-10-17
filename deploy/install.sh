@@ -1,20 +1,28 @@
 #!/usr/bin/env bash
 #
 # NodeImage 一键部署脚本（针对 Ubuntu 20.04/22.04 设计）
-# 使用前请复制 deploy/config.sample.env 为 deploy/config.env 并填写变量。
+# 首次运行会自动生成 deploy/config.env（包含随机密钥），可按需编辑后重新执行。
 #
 # 本脚本将执行以下操作：
-# 1. 安装系统依赖：git、curl、PostgreSQL、Redis、Nginx 等
+# 1. 安装系统依赖：git、curl、PostgreSQL、Redis 等
 # 2. 安装 Go 1.23 与 Node.js 20
 # 3. 安装并配置 MinIO（对象存储）
 # 4. 初始化数据库、生成配置文件
 # 5. 构建后端 API / Worker、前端 Web
-# 6. 创建 systemd 与 Nginx 服务，自动启用并（可选）申请 HTTPS 证书
+# 6. 创建 systemd 服务。反向代理/域名可由用户另行配置
 
 set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CONFIG_FILE="${REPO_DIR}/deploy/config.env"
+
+function random_hex() {
+  openssl rand -hex "$1"
+}
+
+function random_base64() {
+  openssl rand -base64 "$1" | tr -d '\n'
+}
 
 function require_root() {
   if [[ "$(id -u)" -ne 0 ]]; then
@@ -23,16 +31,49 @@ function require_root() {
   fi
 }
 
+function generate_default_config() {
+  echo ">> 未检测到 config.env，正在自动生成默认配置..."
+
+  local db_password
+  db_password="$(random_hex 16)"
+
+  local minio_access_key
+  minio_access_key="nodeimg$(random_hex 3)"
+
+  local minio_secret_key
+  minio_secret_key="$(random_hex 16)"
+
+  local jwt_access_secret jwt_refresh_secret signature_secret
+  jwt_access_secret="$(random_base64 48)"
+  jwt_refresh_secret="$(random_base64 48)"
+  signature_secret="$(random_base64 48)"
+
+  cat >"${CONFIG_FILE}" <<EOF
+# 自动生成的默认配置，如需自定义请编辑此文件并重新运行脚本。
+DB_PASSWORD=${db_password}
+MINIO_ACCESS_KEY=${minio_access_key}
+MINIO_SECRET_KEY=${minio_secret_key}
+JWT_ACCESS_SECRET=${jwt_access_secret}
+JWT_REFRESH_SECRET=${jwt_refresh_secret}
+SIGNATURE_SECRET=${signature_secret}
+FRONTEND_PORT=4173
+API_PORT=8080
+REDIS_STREAM=media:ingest
+EOF
+
+  chmod 600 "${CONFIG_FILE}"
+}
+
 function load_config() {
   if [[ ! -f "${CONFIG_FILE}" ]]; then
-    echo "未找到 ${CONFIG_FILE}，请复制 deploy/config.sample.env 为 deploy/config.env 并填写。" >&2
-    exit 1
+    generate_default_config
+    echo "已生成默认配置：${CONFIG_FILE}"
+    echo "若需自定义域名或密钥，请编辑该文件后重新运行脚本。"
   fi
   set -a
   source "${CONFIG_FILE}"
   set +a
 
-  DOMAIN="${DOMAIN:-}"
   : "${DB_PASSWORD:?DB_PASSWORD 未设置}"
   : "${MINIO_ACCESS_KEY:?MINIO_ACCESS_KEY 未设置}"
   : "${MINIO_SECRET_KEY:?MINIO_SECRET_KEY 未设置}"
@@ -42,19 +83,13 @@ function load_config() {
   : "${FRONTEND_PORT:=4173}"
   : "${API_PORT:=8080}"
   : "${REDIS_STREAM:=media:ingest}"
-  : "${ENABLE_HTTPS:=yes}"
-  if [[ -z "${DOMAIN}" ]]; then
-    LETSENCRYPT_EMAIL="${LETSENCRYPT_EMAIL:-}"
-  else
-    : "${LETSENCRYPT_EMAIL:=admin@${DOMAIN}}"
-  fi
 }
 
 function apt_install() {
   echo ">> 更新 apt 软件源并安装基础依赖..."
   apt-get update
-  apt-get install -y build-essential git curl unzip ufw pkg-config \
-    postgresql postgresql-contrib redis-server nginx libpq-dev
+  apt-get install -y build-essential git curl unzip ufw pkg-config openssl \
+    postgresql postgresql-contrib redis-server libpq-dev
 }
 
 function install_go() {
@@ -153,12 +188,7 @@ function generate_configs() {
   echo ">> 生成配置文件..."
   mkdir -p "${REPO_DIR}/config"
 
-  local cors_entries
-  if [[ -n "${DOMAIN}" ]]; then
-    cors_entries="  - https://${DOMAIN}\n  - https://www.${DOMAIN}"
-  else
-    cors_entries="  - http://localhost\n  - http://127.0.0.1"
-  fi
+  local cors_entries="  - http://localhost\n  - http://127.0.0.1"
 
   cat >"${REPO_DIR}/config/config.yaml" <<EOF
 environment: production
@@ -326,70 +356,17 @@ EOF
   systemctl enable --now nodeimage-api nodeimage-worker nodeimage-web
 }
 
-function setup_nginx() {
-  if [[ -z "${DOMAIN}" ]]; then
-    echo ">> DOMAIN 未设置，跳过 Nginx/HTTPS 配置。"
-    return
-  fi
-
-  echo ">> 配置 Nginx..."
-  cat >/etc/nginx/sites-available/nodeimage.conf <<EOF
-server {
-    listen 80;
-    server_name ${DOMAIN} www.${DOMAIN};
-
-    location /api/ {
-        proxy_pass http://127.0.0.1:${API_PORT}/;
-        proxy_http_version 1.1;
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-    }
-
-    location /media/ {
-        proxy_pass http://127.0.0.1:${API_PORT}/;
-        proxy_http_version 1.1;
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-    }
-
-    location / {
-        proxy_pass http://127.0.0.1:${FRONTEND_PORT};
-        proxy_http_version 1.1;
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-    }
-}
-EOF
-
-  ln -sf /etc/nginx/sites-available/nodeimage.conf /etc/nginx/sites-enabled/nodeimage.conf
-  nginx -t
-  systemctl restart nginx
-
-  if [[ "${ENABLE_HTTPS}" == "yes" ]]; then
-    if [[ -z "${LETSENCRYPT_EMAIL}" ]]; then
-      echo ">> 未提供 LETSENCRYPT_EMAIL，跳过证书申请。"
-    else
-      echo ">> 申请 Let's Encrypt 证书..."
-      apt-get install -y python3-certbot-nginx
-      certbot --non-interactive --nginx -d "${DOMAIN}" -d "www.${DOMAIN}" -m "${LETSENCRYPT_EMAIL}" --agree-tos --redirect || \
-        echo "证书申请失败，请检查域名解析后手动运行 certbot。"
-    fi
-  fi
-}
-
 function configure_firewall() {
   echo ">> 配置防火墙..."
   ufw allow OpenSSH
-  ufw allow 'Nginx Full'
+  ufw allow ${API_PORT}
+  ufw allow ${FRONTEND_PORT}
   yes | ufw enable || true
 }
 
 require_root
-load_config
 apt_install
+load_config
 install_go
 install_node
 configure_postgres
@@ -401,15 +378,8 @@ run_migrations
 build_backend
 build_frontend
 setup_systemd
-setup_nginx
 configure_firewall
 
-if [[ -n "${DOMAIN}" ]]; then
-  local scheme="http"
-  [[ "${ENABLE_HTTPS}" == "yes" ]] && scheme="https"
-  echo "部署完成！请访问 ${scheme}://${DOMAIN} 查看站点。"
-else
-  echo "部署完成！前端监听端口：${FRONTEND_PORT}，API 端口：${API_PORT}。"
-  echo "可通过 http://<服务器IP>:${FRONTEND_PORT} 访问前端界面，或自行配置反向代理。"
-fi
+echo "部署完成！前端监听端口：${FRONTEND_PORT}，API 端口：${API_PORT}。"
+echo "可通过 http://<服务器IP>:${FRONTEND_PORT} 访问前端界面，或自行配置反向代理。"
 echo "若需查看日志：journalctl -u nodeimage-api -f"

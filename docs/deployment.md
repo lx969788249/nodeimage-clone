@@ -9,17 +9,13 @@
    git clone https://github.com/your/repo.git nodeimage-clone
    cd nodeimage-clone/deploy
    ```
-2. 复制并编辑配置文件：
-   ```bash
-   cp config.sample.env config.env
-   nano config.env   # 配置数据库口令、MinIO 密钥等；DOMAIN 可留空自行配置反代
-   ```
-3. 执行安装脚本（需 root 或 sudo）：
+2. 执行安装脚本（需 root 或 sudo）：
    ```bash
    sudo bash install.sh
    ```
-   脚本将安装 Go、Node.js、PostgreSQL、Redis、MinIO，生成配置并构建项目；若填写了 `DOMAIN`，会额外创建 Nginx 站点及（可选）Let's Encrypt 证书。
-4. 如果配置了域名，安装完成后可访问 `https://<DOMAIN>` 验证站点；如未设置域名，前端默认监听 `http://<服务器IP>:4173`，可结合自有反向代理。查看日志可用 `journalctl -u nodeimage-api -f`。
+   脚本将安装 Go、Node.js、PostgreSQL、Redis、MinIO，生成配置并构建项目。
+3. 初次运行脚本会自动创建 `deploy/config.env`（包含随机密钥）。需要自定义端口或其他参数时，可修改该文件后重新执行脚本。
+4. 安装完成后前端默认监听 `http://<服务器IP>:4173`，API 监听 `http://<服务器IP>:8080`，可按需结合自有反向代理或自定义域名。查看日志可用 `journalctl -u nodeimage-api -f`。
 
 如需手动部署或自定义环境，可参考以下详细步骤。
 

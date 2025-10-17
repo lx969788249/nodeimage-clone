@@ -123,11 +123,7 @@ nodeimage-clone/
 
 ```bash
 cd nodeimage-clone/deploy
-cp config.sample.env config.env
-# 编辑 config.env 配置数据库/MinIO 密钥；若自行配置反代，DOMAIN 可留空
-nano config.env
-
 sudo bash install.sh
 ```
 
-脚本会自动创建 systemd 服务（`nodeimage-api`、`nodeimage-worker`、`nodeimage-web`）并构建必要组件；如果配置了 `DOMAIN`，还会生成 Nginx 站点与可选的 Let's Encrypt 证书。若保留 `DOMAIN` 为空，服务默认监听本地端口，可按需自行接入其他反向代理。
+首次运行脚本会自动生成 `deploy/config.env` 并写入随机密钥；如需自定义端口或其他参数，可编辑该文件后重新执行脚本。脚本会创建 systemd 服务（`nodeimage-api`、`nodeimage-worker`、`nodeimage-web`），前端默认监听 `4173` 端口、API 监听 `8080` 端口，方便后续接入自建反向代理或自定义域名。
