@@ -1,5 +1,28 @@
 # 部署与验证指南
 
+## 一键自动部署（推荐）
+
+仓库提供 `deploy/install.sh` 脚本，可在全新 Ubuntu 20.04/22.04 VPS 上自动完成依赖安装、数据库与对象存储初始化、构建和服务部署。
+
+1. 克隆仓库并进入 `deploy/`：
+   ```bash
+   git clone https://github.com/your/repo.git nodeimage-clone
+   cd nodeimage-clone/deploy
+   ```
+2. 复制并编辑配置文件：
+   ```bash
+   cp config.sample.env config.env
+   nano config.env   # 配置数据库口令、MinIO 密钥等；DOMAIN 可留空自行配置反代
+   ```
+3. 执行安装脚本（需 root 或 sudo）：
+   ```bash
+   sudo bash install.sh
+   ```
+   脚本将安装 Go、Node.js、PostgreSQL、Redis、MinIO，生成配置并构建项目；若填写了 `DOMAIN`，会额外创建 Nginx 站点及（可选）Let's Encrypt 证书。
+4. 如果配置了域名，安装完成后可访问 `https://<DOMAIN>` 验证站点；如未设置域名，前端默认监听 `http://<服务器IP>:4173`，可结合自有反向代理。查看日志可用 `journalctl -u nodeimage-api -f`。
+
+如需手动部署或自定义环境，可参考以下详细步骤。
+
 ## 1. 基础环境
 
 - Go 1.23+

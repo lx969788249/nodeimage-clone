@@ -114,3 +114,20 @@ nodeimage-clone/
 5. **前端复刻**：SvelteKit 搭建页面，按 nodeimage 原有布局与动效复现，接入 API。
 
 完成上述步骤后将进入部署与性能调优阶段，并补充详细的上线指南。接下来将进入数据库与 API 设计阶段。 
+
+## VPS 一键部署脚本
+
+仓库提供 `deploy/install.sh` 安装脚本，可在全新的 Ubuntu 服务器上自动完成依赖安装、数据库与对象存储初始化、构建与服务部署。
+
+使用方式：
+
+```bash
+cd nodeimage-clone/deploy
+cp config.sample.env config.env
+# 编辑 config.env 配置数据库/MinIO 密钥；若自行配置反代，DOMAIN 可留空
+nano config.env
+
+sudo bash install.sh
+```
+
+脚本会自动创建 systemd 服务（`nodeimage-api`、`nodeimage-worker`、`nodeimage-web`）并构建必要组件；如果配置了 `DOMAIN`，还会生成 Nginx 站点与可选的 Let's Encrypt 证书。若保留 `DOMAIN` 为空，服务默认监听本地端口，可按需自行接入其他反向代理。
