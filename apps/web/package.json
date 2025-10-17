@@ -1,0 +1,29 @@
+{
+  "name": "nodeimage-web",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite dev",
+    "build": "vite build",
+    "preview": "vite preview",
+    "lint": "eslint ."
+  },
+  "devDependencies": {
+    "@sveltejs/kit": "^2.5.5",
+    "@sveltejs/vite-plugin-svelte": "^3.1.1",
+    "@tailwindcss/forms": "^0.5.7",
+    "autoprefixer": "^10.4.17",
+    "eslint": "^8.57.0",
+    "postcss": "^8.4.35",
+    "svelte": "^4.2.12",
+    "tailwindcss": "^3.4.3",
+    "typescript": "^5.4.5",
+    "vite": "^5.2.8"
+  },
+  "dependencies": {
+    "axios": "^1.6.8",
+    "clsx": "^2.1.0",
+    "motion": "^10.16.4"
+  }
+}

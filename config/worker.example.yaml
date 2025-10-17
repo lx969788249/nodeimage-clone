@@ -1,0 +1,25 @@
+environment: development
+
+redis:
+  addr: redis:6379
+  password: ""
+  db: 0
+  stream: media:ingest
+  group: media-workers
+  consumer: worker-1
+
+storage:
+  endpoint: http://minio:9000
+  accessKey: nodeimage
+  secretKey: nodeimage-secret
+  bucketOriginals: nodeimage-originals
+  bucketVariants: nodeimage-variants
+  useSSL: false
+  region: us-east-1
+
+queues:
+  visibilityTimeout: 2m
+  claimInterval: 15s
+
+logging:
+  level: info

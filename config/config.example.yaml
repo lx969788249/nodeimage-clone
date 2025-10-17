@@ -1,0 +1,45 @@
+environment: development
+
+http:
+  host: 0.0.0.0
+  port: 8080
+  readTimeout: 10s
+  writeTimeout: 15s
+  idleTimeout: 60s
+
+postgres:
+  dsn: postgres://nodeimage:nodeimage@postgres:5432/nodeimage?sslmode=disable
+  maxOpen: 40
+  maxIdle: 10
+  connMaxLifetime: 30m
+
+redis:
+  addr: redis:6379
+  password: ""
+  db: 0
+
+storage:
+  endpoint: http://minio:9000
+  accessKey: nodeimage
+  secretKey: nodeimage-secret
+  bucketOriginals: nodeimage-originals
+  bucketVariants: nodeimage-variants
+  useSSL: false
+  region: us-east-1
+
+security:
+  jwtAccessSecret: change-me-access
+  jwtRefreshSecret: change-me-refresh
+  jwtAccessTTL: 15m
+  jwtRefreshTTL: 720h
+  signatureSecret: change-me-signature
+  maxSessions: 10
+
+nsfw:
+  modelPath: ./models/nsfw_model.onnx
+  thresholdBlock: 0.92
+  thresholdReview: 0.75
+  recheckInterval: 168h
+
+allowCORSOrigins:
+  - https://www.nodeimage.com
