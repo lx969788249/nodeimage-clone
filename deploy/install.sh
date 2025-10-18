@@ -124,6 +124,7 @@ function configure_postgres() {
   echo ">> 配置 PostgreSQL..."
   sudo -u postgres psql -tc "SELECT 1 FROM pg_roles WHERE rolname='nodeimage';" | grep -q 1 || \
     sudo -u postgres psql -c "CREATE ROLE nodeimage WITH LOGIN PASSWORD '${DB_PASSWORD}';"
+  sudo -u postgres psql -c "ALTER ROLE nodeimage WITH PASSWORD '${DB_PASSWORD}';" >/dev/null
   sudo -u postgres psql -tc "SELECT 1 FROM pg_database WHERE datname='nodeimage';" | grep -q 1 || \
     sudo -u postgres psql -c "CREATE DATABASE nodeimage OWNER nodeimage;"
 }
@@ -270,6 +271,9 @@ EOF
 function run_migrations() {
   echo ">> 执行数据库迁移..."
   export PATH=$PATH:/usr/local/go/bin
+  local GOPATH_DIR
+  GOPATH_DIR="$(go env GOPATH 2>/dev/null || echo "$HOME/go")"
+  export PATH=$PATH:"${GOPATH_DIR}/bin"
   pushd "${REPO_DIR}/apps/api" >/dev/null
   go mod tidy
   go install github.com/pressly/goose/v3/cmd/goose@latest
